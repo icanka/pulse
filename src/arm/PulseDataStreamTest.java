@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import org.apache.commons.io.FileUtils;
 import flanagan.complex.Complex;
 import flanagan.math.FourierTransform;
+import utils.ByteIntUtil;
 
 public class PulseDataStreamTest {
 
@@ -87,6 +88,16 @@ public class PulseDataStreamTest {
 						// second four bytes as an integer (4, 5, 6, 7) and so on...
 						for (int rangeIndex = 0; rangeIndex < totalRangeIndex; rangeIndex++) {
 							//TODO fill me in
+							
+							int iq = ByteIntUtil.byteArrayToInt(rangeBuffer, (rangeIndex * 4));
+							
+							// iq is taken as two different values, most significant 16 bit 
+							// as one value, least significant 16 as the other.
+							short i = (short) ((iq & 0xFFFF0000) >> 16);
+							short q = (short) (iq & (0x0000FFFF));
+							
+							pulse.getDataIPrevFFT()[rangeIndex * 4] = i;
+							
 						}
 
 						// mock values
@@ -111,20 +122,6 @@ public class PulseDataStreamTest {
 		return 0;
 	}
 
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
 	
 	
 	

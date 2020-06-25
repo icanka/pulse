@@ -82,6 +82,8 @@ public class PulseDataList {
 							for (int rangeIndex = 0; rangeIndex < totalRangeIndex; rangeIndex++) {
 								
 								int iq = ByteIntUtil.byteArrayToInt(rangeBuffer, (rangeIndex * 4));
+								
+								// Bitmask
 								short i = (short) ((iq & 0xFFFF0000) >> 16);
 								short q = (short) (iq & (0x0000FFFF));
 
