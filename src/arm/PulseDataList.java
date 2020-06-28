@@ -12,9 +12,12 @@ import flanagan.math.FourierTransform;
 import utils.ByteIntUtil;
 
 public class PulseDataList {
-	private ArrayList<Pulse> pulseList = new ArrayList<Pulse>();
 
-	private FFTWindow fftWindow;
+	static FourierTransform fft = new FourierTransform();
+	static double MATCH_MULTIPLIER = Math.pow(2, 15);
+
+	private String parentRecordPath = "";
+	private ArrayList<Pulse> pulseList = new ArrayList<Pulse>();
 
 	private double[][] amplitudeListInDB;
 	private double[][] amplitudeListInLinear;
@@ -22,13 +25,8 @@ public class PulseDataList {
 	private float dataIAfterFFT[][];
 	private float dataQAfterFFT[][];
 
-	static FourierTransform fft = new FourierTransform();
-	static double MATCH_MULTIPLIER = Math.pow(2, 15);
-
 	private int pulseCount;
 	private int rangeCount;
-
-	private String parentRecordPath = "";
 
 	public boolean loadData(String recordName, int timeInSec) {
 
@@ -43,68 +41,90 @@ public class PulseDataList {
 	}
 
 	public int importRKADataBuf(String fileName) {
+		pulseList = new ArrayList<Pulse>();
+
 		boolean isEOFReached = false;
+
+		int totalRangeIndex = 268;
+		byte header[] = new byte[12];
+
+		// 1072 sized byte array
+		byte rangeBuffer[] = new byte[268 * 4];
+		byte cmdIdSize[] = new byte[8];
+
 		try {
-			pulseList = new ArrayList<Pulse>();
 
-			FileInputStream fileIn = new FileInputStream(fileName);
+			// create a reader
+			FileInputStream fis = new FileInputStream(fileName);
+			BufferedInputStream reader = new BufferedInputStream(fis);
 
-			BufferedInputStream reader = new BufferedInputStream(fileIn);
-
-			byte rangeBuffer[] = new byte[268 * 4];
-			byte header[] = new byte[12];
-			int totalRangeIndex = 268;
-
-			byte cmdIdSize[] = new byte[8];
 			System.out.println("Reading Started");
 
+			int count = 0;
 			while (!isEOFReached) {
-				for (int packetIndex = 0; packetIndex < 8; packetIndex++) {
-					reader.read(cmdIdSize);
-					for (int pulseIndex = 0; pulseIndex < 32; pulseIndex++) {
 
+				for (int packetIndex = 0; packetIndex < 8; packetIndex++) {
+
+					// reader 8 byte into cmdIdSize array
+					reader.read(cmdIdSize);
+
+					for (int pulseIndex = 0; pulseIndex < 32; pulseIndex++) {
+						count++;
+
+						// read 12 bytes into header array
 						if (reader.read(header) == -1)
 							isEOFReached = true;
-						short range = (short) ((ByteIntUtil.byteArrayToIntNew(header, 8) & (0x00003FFF)));
-						int packetId = ByteIntUtil.byteArrayToInt(header, 4);
 
-						if (reader.read(rangeBuffer) == -1)
+						// read 1072 byte into rangeBuffer array
+						if (reader.read(rangeBuffer) == -1) {
+							System.out.println("EOF reached in " + count + ". iteration");
 							isEOFReached = true;
-						
-						
+						}
+
 						if (!isEOFReached) {
-							
-//							System.out.println("PulseDataList.importRKADataBuf(): header: "
-//									+ ByteIntUtil.byteArrayToHexNBytes(header, 4) + " range: " + range + " Packet Id:"
-//									+ packetId + " pulse index: " + pulseIndex);
-							
+							System.out.print("EOF not reached: " + reader.available() + " bytes still available in ");
+							System.out.println(count + ". iteration");
+
+							System.out.println("Creating a Pulse with id: " + ((packetIndex * 32) + pulseIndex));
+
+							// Total of 256 Pulse Objects will be created.
 							Pulse pulse = new Pulse(268);
+
+							// iterate 268 times, acquire 268 integers as a result.
+							// first four elements in the rangeBuffer (0, 1, 2, 3) as an integer,
+							// second four bytes as an integer (4, 5, 6, 7) and so on...
 							for (int rangeIndex = 0; rangeIndex < totalRangeIndex; rangeIndex++) {
-								
 								int iq = ByteIntUtil.byteArrayToInt(rangeBuffer, (rangeIndex * 4));
-								
-								// Bitmask
+
+								// iq is taken as two different values, most significant 16 bit
+								// as one value, least significant 16 as the other.
 								short i = (short) ((iq & 0xFFFF0000) >> 16);
 								short q = (short) (iq & (0x0000FFFF));
 
 								pulse.getDataIPrevFFT()[rangeIndex] = i;
 								pulse.getDataQPrevFFT()[rangeIndex] = q;
+
 							}
 							pulseList.add(pulse);
+
 						}
 					}
+
 				}
+
 			}
-			System.out.println("Reading Finished");
+			reader.close();
+
 		} catch (FileNotFoundException e) {
 			e.printStackTrace();
 			isEOFReached = true;
+
 		} catch (IOException e) {
 			e.printStackTrace();
 			isEOFReached = true;
 		}
-		return pulseList.size();
 
+		return pulseList.size();
 	}
 
 	/**
@@ -123,7 +143,7 @@ public class PulseDataList {
 		this.rangeCount = rangeCount;
 
 		Complex data[] = new Complex[pulseCount];
-		double[] window = fftWindow.generateBlackManWindow(pulseCount);
+		double[] window = FFTWindow.generateBlackManWindow(pulseCount);
 
 		dataIAfterFFT = new float[rangeCount][pulseCount];
 		dataQAfterFFT = new float[rangeCount][pulseCount];
@@ -166,10 +186,6 @@ public class PulseDataList {
 				amplitudeListInDB[rangeIndex][i] = amplitudeInDB;
 			}
 		}
-	}
-
-	public void setFFTWindow(FFTWindow fftWindow) {
-		this.fftWindow = fftWindow;
 	}
 
 	public double[][] getAmplitudeListInDB() {
